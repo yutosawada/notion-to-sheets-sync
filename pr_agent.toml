@@ -1,6 +1,7 @@
 # Qodo 設定ファイル ベストプラクティス (pr_agent.toml)
 # 目的: review-committed ワークフローで、厳格なフォーマット・グルーピング・深刻度・行番号/ファイルパス明示・実行可能な提案を一貫して出力する
 
+Please ensure that the output is in Japanese.
 [qodo.general]
 language = "ja"                             # 出力は日本語
 strict_format = true                        # 出力フォーマット(QODO_CONFIRM/QODO_SUGGESTION)を厳格に強制
@@ -11,101 +12,9 @@ omit_empty_sections = true                  # 問題がないカテゴリは出�
 base_branch = "origin/main"             # 既定の比較対象ブランチ
 compare_only_committed = true               # ローカルの未コミット変更は無視
 include_file_paths = true                   # 各提案に絶対パスを含める
-include_line_numbers = true                 # 行番��の明示を推奨（テンプレート側で管理）
+include_line_numbers = true                 # 行番号の明示を推奨（テンプレート側で管理）
 
-# 出力の見出し/順序/ボタン文言
-[qodo.presentation]
-changes_summary_header = "# Changes summary"
-code_suggestions_header = "# Code suggestions"
-# 表示順序（高優先カテゴリを先頭に）
-group_order = [
-  "Security vulnerabilities",
-  "Potential bugs",
-  "Code quality issues",
-  "Performance concerns",
-  "Misalignment with best practices",
-  "Leftover debugging code",
-]
-severity_order = ["High", "Medium", "Low"]
 
-[qodo.suggestions.defaults]
-cta = "Resolve"
-ctaText = "Resolve"
-doneCtaText = "Resolved"
-severity_default = "Medium"
-file_path_absolute = true
-require_actionable = true                   # 直接適用可能な具体的修正を必須
-require_code_examples = true               # 具体的なコード差分の提示を必須
-require_why_explanation = true             # なぜ必要かの説明を必須（簡潔）
-
-# グループまとめ解決ボタンのテンプレート（件数は実行時に埋め込み）
-[qodo.suggestions.group_cta]
-enable = true
-text_map = {
-  "Security vulnerabilities" = "Security vulnerabilities",
-  "Potential bugs" = "Potential bugs",
-  "Code quality issues" = "Code quality issues",
-  "Performance concerns" = "Performance concerns",
-  "Misalignment with best practices" = "Misalignment with best practices",
-  "Leftover debugging code" = "Leftover debugging code",
-}
-
-# セキュリティ/ログ方針（レビュー時の指摘基準にも利用）
-[qodo.security]
-log_redaction = true                        # ログのマスキングを推奨
-allow_response_body_logging = false         # 外部APIのエラーボディはログ禁止
-redact_keys = [
-  "authorization", "auth", "token", "password", "secret", "api_key",
-  "notion_api_token", "google_service_account_json"
-]
-
-[qodo.performance]
-enable_pagination_checks = true             # ページネーション/遅延/バックオフの指摘を有効
-recommend_retry_backoff = true              # 429/5xx/ネットワーク例外への指数バックオフを推奨
-
-[qodo.quality]
-flag_missing_error_handling = true          # 例外ハンドリング不足の指摘
-flag_inconsistent_naming = true             # 命名の不整合
-flag_duplicate_code = true                  # 重複コード
-flag_missing_docs = true                    # 複雑ロジックの説明欠如
-
-# 出力テンプレート（ラッパーを強制）
-[qodo.output]
-use_wrappers = true
-wrappers = ["QODO_CONFIRM", "QODO_SUGGESTION"]
-confirm_template_single = "<QODO_CONFIRM>{\"identifier\":\"all-{{identifier}}\",\"text\":\"{{text}}\",\"type\":\"resolve_all\",\"prompt\":\"{{prompt}}\"}</QODO_CONFIRM>"
-confirm_template_multi = "<QODO_CONFIRM>{\"identifier\":\"all-{{identifier}}\",\"text\":\"{{text}}\",\"type\":\"resolve_all\",\"ctaText\":\"{{ctaText}}\",\"doneCtaText\":\"{{doneCtaText}}\",\"prompt\":\"{{prompt}}\"}</QODO_CONFIRM>"
-suggestion_template = "<QODO_SUGGESTION>\n{{json}}\n</QODO_SUGGESTION>"
-
-[qodo.limits]
-max_suggestions_per_group = 10
-max_total_suggestions = 50
-max_code_block_chars = 20000               # 過大な差分を防止
-
-[qodo.ignore]
-paths = ["**/node_modules/**", "**/venv/**", "**/__pycache__/**"]
-file_extensions = []                        # 追加で無視する拡張子があれば記載
-
-# 変更サマリの要素（自動生成時の含有項目）
-[qodo.summary]
-include_changed_files = true
-include_components = true
-include_purpose = true
-include_quality_assessment = true
-
-# 提案品質の最低ライン（なければ落とす）
-[qodo.gates]
-require_file_path = true
-require_severity = true
-require_description = true
-require_code_suggestion = true
-
-# ワークフロー設定（review-committed を既定に）
-[workflows.review_committed]
-base_branch = "origin/develop"
-compare_only_committed = true
-output_language = "ja"
-use_group_confirm_cards = true
 
 # 参考: PRレビュー時のAIモデル/プロンプト微調整（必要に応じて）
 [ai]
