@@ -20,8 +20,23 @@ SYNC_LOOKBACK_SECONDS = 5
 CONFIG_LAST_SYNC_CELL = "config!B2"
 
 
+SENSITIVE_KEYS = {"authorization", "auth", "token", "password", "secret", "api_key", "notion_api_token", "google_service_account_json"}
+
+def _redact(value):
+    try:
+        if isinstance(value, dict):
+            return {k: ("***" if str(k).lower() in SENSITIVE_KEYS else _redact(v)) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_redact(v) for v in value]
+        if isinstance(value, str) and any(k in value.lower() for k in SENSITIVE_KEYS):
+            return "***"
+        return value
+    except Exception:
+        return "***"
+
 def log(level: str, event: str, **fields):
-    record = {"level": level, "event": event, "ts_epoch": time.time(), **fields}
+    safe_fields = {k: _redact(v) for k, v in fields.items()}
+    record = {"level": level, "event": event, "ts_epoch": time.time(), **safe_fields}
     print(json.dumps(record, ensure_ascii=False))
 
 
@@ -222,8 +237,9 @@ def fetch_pages_from_notion_db(
         )
 
         if resp.status_code >= 400:
-            log("ERROR", "notion_query_error", status_code=resp.status_code, body=resp.text[:5000])
-            raise RuntimeError(f"Notion API error {resp.status_code}: {resp.text}")
+            # レスポンス本文を記録しない最小限の構造化ログ
+            log("ERROR", "notion_query_error", status_code=resp.status_code, reason=getattr(resp, "reason", None), headers={k: resp.headers.get(k) for k in ("x-request-id", "retry-after") if k in resp.headers})
+            raise RuntimeError(f"Notion API error {resp.status_code}")
 
         data = resp.json()
         results = data.get("results", [])
@@ -367,7 +383,8 @@ def lambda_handler(event, context):
     request_id = getattr(context, "aws_request_id", None)
     start_ts = time.time()
 
-    log("INFO", "job_start", request_id=request_id, event_preview=str(event)[:500])
+    # 機微情報を避けるため、イベントの高レベル情報のみを記録
+    log("INFO", "job_start", request_id=request_id, event_type=type(event).__name__, event_keys=list(event.keys()) if isinstance(event, dict) else None)
 
     try:
         # 必須設定
