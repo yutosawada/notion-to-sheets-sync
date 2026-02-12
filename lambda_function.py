@@ -20,23 +20,8 @@ SYNC_LOOKBACK_SECONDS = 5
 CONFIG_LAST_SYNC_CELL = "config!B2"
 
 
-SENSITIVE_KEYS = {"authorization", "auth", "token", "password", "secret", "api_key", "notion_api_token", "google_service_account_json"}
-
-def _redact(value):
-    try:
-        if isinstance(value, dict):
-            return {k: ("***" if str(k).lower() in SENSITIVE_KEYS else _redact(v)) for k, v in value.items()}
-        if isinstance(value, list):
-            return [_redact(v) for v in value]
-        if isinstance(value, str) and any(k in value.lower() for k in SENSITIVE_KEYS):
-            return "***"
-        return value
-    except Exception:
-        return "***"
-
 def log(level: str, event: str, **fields):
-    safe_fields = {k: _redact(v) for k, v in fields.items()}
-    record = {"level": level, "event": event, "ts_epoch": time.time(), **safe_fields}
+    record = {"level": level, "event": event, "ts_epoch": time.time(), **fields}
     print(json.dumps(record, ensure_ascii=False))
 
 
@@ -237,9 +222,8 @@ def fetch_pages_from_notion_db(
         )
 
         if resp.status_code >= 400:
-            # レスポンス本文を記録しない最小限の構造化ログ
-            log("ERROR", "notion_query_error", status_code=resp.status_code, reason=getattr(resp, "reason", None), headers={k: resp.headers.get(k) for k in ("x-request-id", "retry-after") if k in resp.headers})
-            raise RuntimeError(f"Notion API error {resp.status_code}")
+            log("ERROR", "notion_query_error", status_code=resp.status_code, body=resp.text[:5000])
+            raise RuntimeError(f"Notion API error {resp.status_code}: {resp.text}")
 
         data = resp.json()
         results = data.get("results", [])
@@ -383,8 +367,7 @@ def lambda_handler(event, context):
     request_id = getattr(context, "aws_request_id", None)
     start_ts = time.time()
 
-    # 機微情報を避けるため、イベントの高レベル情報のみを記録
-    log("INFO", "job_start", request_id=request_id, event_type=type(event).__name__, event_keys=list(event.keys()) if isinstance(event, dict) else None)
+    log("INFO", "job_start", request_id=request_id, event_preview=str(event)[:500])
 
     try:
         # 必須設定
@@ -469,27 +452,25 @@ def lambda_handler(event, context):
         rows_data: list[list[str]] = []
         max_last_edited: datetime | None = None
 
-        # フィールドマッピング（キー名 -> Notion ��ロパティ名）
-        field_mappings = {
-            "company": company_prop,
-            "active": active_prop,
-            "add_date": add_date_prop,
-            "state": state_prop,
-            "process": process_prop,
-            "category": category_prop,
-            "hq": hq_prop,
-            "opp_date": opp_date_prop,
-            "contacted": contacted_date_prop,
-            "negotiation": negotiation_date_prop,
-            "collaboration": collaboration_date_prop,
-            "closed": closed_date_prop,
-            "discover": discover_date_prop,
-            "assess": assess_date_prop,
-            "purchase": purchase_date_prop,
-            "pilot": pilot_date_prop,
-            "adopt": adopt_date_prop,
+        empty_counts = {
+            "company": 0,
+            "active": 0,
+            "add_date": 0,
+            "state": 0,
+            "process": 0,
+            "category": 0,
+            "hq": 0,
+            "opp_date": 0,
+            "contacted": 0,
+            "negotiation": 0,
+            "collaboration": 0,
+            "closed": 0,
+            "discover": 0,
+            "assess": 0,
+            "purchase": 0,
+            "pilot": 0,
+            "adopt": 0,
         }
-        empty_counts = {k: 0 for k in field_mappings.keys()}
 
         t0 = time.time()
         for page in pages:
@@ -527,30 +508,40 @@ def lambda_handler(event, context):
             pilot_date = normalize_date_value(extract_text_property(props, pilot_date_prop))
             adopt_date = normalize_date_value(extract_text_property(props, adopt_date_prop))
 
-            # フィールド値をマッピング
-            field_values = {
-                "company": company,
-                "active": active_flag,
-                "add_date": add_date,
-                "state": state,
-                "process": process_of_vcm,
-                "category": category,
-                "hq": hq,
-                "opp_date": opportunity_date,
-                "contacted": contacted_date,
-                "negotiation": in_negotiation_date,
-                "collaboration": in_collaboration_date,
-                "closed": closed_date,
-                "discover": discover_date,
-                "assess": assess_date,
-                "purchase": purchase_date,
-                "pilot": pilot_date,
-                "adopt": adopt_date,
-            }
-            # 空のフィールドをカウント
-            for key, value in field_values.items():
-                if not value:
-                    empty_counts[key] += 1
+            if not company:
+                empty_counts["company"] += 1
+            if not active_flag:
+                empty_counts["active"] += 1
+            if not add_date:
+                empty_counts["add_date"] += 1
+            if not state:
+                empty_counts["state"] += 1
+            if not process_of_vcm:
+                empty_counts["process"] += 1
+            if not category:
+                empty_counts["category"] += 1
+            if not hq:
+                empty_counts["hq"] += 1
+            if not opportunity_date:
+                empty_counts["opp_date"] += 1
+            if not contacted_date:
+                empty_counts["contacted"] += 1
+            if not in_negotiation_date:
+                empty_counts["negotiation"] += 1
+            if not in_collaboration_date:
+                empty_counts["collaboration"] += 1
+            if not closed_date:
+                empty_counts["closed"] += 1
+            if not discover_date:
+                empty_counts["discover"] += 1
+            if not assess_date:
+                empty_counts["assess"] += 1
+            if not purchase_date:
+                empty_counts["purchase"] += 1
+            if not pilot_date:
+                empty_counts["pilot"] += 1
+            if not adopt_date:
+                empty_counts["adopt"] += 1
 
             rows_data.append(
                 [
